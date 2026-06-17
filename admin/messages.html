@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mesajlar | VHEORA Admin</title>
+  <link rel="stylesheet" href="admin.css?v=2">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&family=Cormorant+Garamond:wght@500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Mesajlar</h1>
+        <p class="page-subtitle">Iletisim ve teklif talepleri.</p>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="exportCSV()">CSV Export</button>
+    </div>
+    <div class="tabs" id="messageTabs">
+      <button class="tab-btn active" data-type="all">Tumu</button>
+      <button class="tab-btn" data-type="contact">Iletisim</button>
+      <button class="tab-btn" data-type="quote">Teklif</button>
+      <button class="tab-btn" data-type="unread">Okunmamis</button>
+    </div>
+    <div class="table-container" id="messagesContainer">
+      <p class="empty-state">Yukleniyor...</p>
+    </div>
+  </main>
+
+  <script>
+    const API = window.location.protocol === 'file:' ? 'http://localhost:3001' : '';
+    let currentFilter = 'all';
+
+    function getToken() {
+      const t = localStorage.getItem('vheora_token');
+      if (!t) window.location.href = '/admin/';
+      return t;
+    }
+
+    function logout() {
+      localStorage.removeItem('vheora_token');
+      window.location.href = '/admin/';
+    }
+
+    document.getElementById('sidebar').innerHTML = `
+      <div class="sidebar-logo">VHEORA</div>
+      <div class="sidebar-sub">Admin Panel</div>
+      <nav class="sidebar-nav">
+        <a href="/admin/dashboard.html" class="sidebar-link">📊 Dashboard</a>
+        <a href="/admin/products.html" class="sidebar-link">💎 Urunler</a>
+        <a href="/admin/messages.html" class="sidebar-link active">✉️ Mesajlar</a>
+        <a href="/admin/testimonials.html" class="sidebar-link">⭐ Yorumlar</a>
+        <a href="/admin/logs.html" class="sidebar-link">📋 Loglar</a>
+        <a href="/" class="sidebar-link">🌐 Siteye Git</a>
+      </nav>
+      <button class="sidebar-logout" onclick="logout()">🚪 Cikis Yap</button>
+    `;
+
+    document.body.insertAdjacentHTML('afterbegin', '<div class="sidebar-overlay" onclick="closeSidebar()"></div>');
+    document.body.insertAdjacentHTML('afterbegin', '<button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Menuyu ac/kapat">☰</button>');
+
+    function toggleSidebar() {
+      document.body.classList.toggle('sidebar-open');
+    }
+
+    function closeSidebar() {
+      document.body.classList.remove('sidebar-open');
+    }
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.type;
+        loadMessages();
+      });
+    });
+
+    async function markAsRead(id) {
+      const token = getToken();
+      await fetch(`${API}/api/admin/messages/${id}/read`, {
+        method: 'PUT', headers: { 'Authorization': `Bearer ${token}` }
+      });
+      loadMessages();
+    }
+
+    async function deleteMessage(id) {
+      if (!confirm('Mesaji sil?')) return;
+      const token = getToken();
+      await fetch(`${API}/api/admin/messages/${id}`, {
+        method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
+      });
+      loadMessages();
+    }
+
+    async function loadMessages() {
+      const container = document.getElementById('messagesContainer');
+      const token = getToken();
+      try {
+        let url;
+        if (currentFilter === 'unread') {
+          url = `${API}/api/admin/messages?type=`;
+        } else {
+          url = currentFilter === 'all' ? `${API}/api/admin/messages` : `${API}/api/admin/messages?type=${currentFilter}`;
+        }
+        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+        let messages = await res.json();
+
+        if (currentFilter === 'unread') {
+          messages = messages.filter(m => !m.is_read);
+        }
+
+        if (!messages.length) {
+          container.innerHTML = '<p class="empty-state">Henuz mesaj yok.</p>';
+          return;
+        }
+
+        container.innerHTML = `
+          <table>
+            <thead><tr><th>Tarih</th><th>Isim</th><th>Iletisim</th><th>Konu/Urun</th><th>Detay</th><th>Tip</th><th>Durum</th><th style="text-align:right;">Islem</th></tr></thead>
+            <tbody>
+              ${messages.map(m => `
+                <tr style="${!m.is_read ? 'background:rgba(212,168,83,0.04);' : ''}">
+                  <td style="color:var(--gray);font-size:0.8rem;">${new Date(m.created_at).toLocaleDateString('tr-TR')} ${new Date(m.created_at).toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit'})}</td>
+                  <td style="font-weight:${!m.is_read ? '600' : '400'};">${m.first_name || '-'} ${m.last_name || ''}</td>
+                  <td>${m.email || m.phone || '-'}</td>
+                  <td>${m.subject || m.product_name || '-'}</td>
+                  <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray);">${(m.message || '').substring(0, 60)}${(m.message || '').length > 60 ? '...' : ''}</td>
+                  <td><span class="badge ${m.type === 'quote' ? 'badge-gold' : 'badge-green'}">${m.type === 'quote' ? 'Teklif' : 'Iletisim'}</span></td>
+                  <td><span class="badge ${m.is_read ? 'badge-green' : 'badge-red'}">${m.is_read ? 'Okundu' : 'Yeni'}</span></td>
+                  <td style="text-align:right;white-space:nowrap;">
+                    ${!m.is_read ? `<button class="btn btn-sm" style="background:var(--green);color:white;" onclick="markAsRead(${m.id})">✓</button>` : ''}
+                    <button class="btn btn-sm btn-danger" onclick="deleteMessage(${m.id})">🗑️</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      } catch (err) {
+        container.innerHTML = '<p class="empty-state">Sunucuya baglanilamadi.</p>';
+      }
+    }
+
+    async function exportCSV() {
+      const token = getToken();
+      try {
+        const res = await fetch(`${API}/api/admin/messages`, { headers: { 'Authorization': `Bearer ${token}` } });
+        const messages = await res.json();
+        const headers = 'Tarih,Isim,E-posta,Telefon,Konu/Urun,Mesaj,Tip,Durum\n';
+        const rows = messages.map(m => {
+          const date = new Date(m.created_at).toLocaleDateString('tr-TR');
+          const name = `${m.first_name || ''} ${m.last_name || ''}`.trim();
+          const subject = (m.subject || m.product_name || '').replace(/,/g, ' ');
+          const msg = (m.message || '').replace(/,/g, ' ').replace(/\n/g, ' ');
+          const type = m.type === 'quote' ? 'Teklif' : 'Iletisim';
+          const status = m.is_read ? 'Okundu' : 'Yeni';
+          return `${date},${name},${m.email || ''},${m.phone || ''},${subject},${msg},${type},${status}`;
+        }).join('\n');
+        const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `vheora-mesajlar-${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+      } catch (err) {
+        alert('Export basarisiz');
+      }
+    }
+
+    loadMessages();
+  </script>
+</body>
+</html>
