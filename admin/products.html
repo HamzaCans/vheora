@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ürünler | VHEORA Admin</title>
+  <link rel="stylesheet" href="admin.css?v=2">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&family=Cormorant+Garamond:wght@500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Ürünler</h1>
+        <p class="page-subtitle">Koleksiyon ürünlerini yönetin.</p>
+      </div>
+      <button class="btn btn-primary" onclick="openModal()">+ Yeni Ürün</button>
+    </div>
+    <div class="table-container" id="productsContainer">
+      <p class="empty-state">Yükleniyor...</p>
+    </div>
+  </main>
+
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <h2 class="modal-title" id="modalTitle">Yeni Ürün</h2>
+      <form id="productForm">
+        <input type="hidden" id="editId">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Ürün Adı *</label>
+            <input type="text" id="prodName" required>
+          </div>
+          <div class="form-group">
+            <label>Kategori *</label>
+            <select id="prodCategory" required>
+              <option value="">Seçin</option>
+              <option value="yuzuk">Yüzük</option>
+              <option value="bileklik">Bileklik</option>
+              <option value="kolye">Kolye</option>
+              <option value="kupe">Küpe</option>
+              <option value="set">Set Takı</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Açıklama</label>
+          <textarea id="prodDescription"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Fiyat / Referans</label>
+            <input type="text" id="prodPrice" placeholder="Örn: Talep üzerine">
+          </div>
+          <div class="form-group">
+            <label>Rozet</label>
+            <input type="text" id="prodBadge" placeholder="Yeni, Çok Satan, Sınırlı Seri">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Görsel</label>
+            <input type="file" id="prodImage" accept="image/*">
+          </div>
+          <div class="form-group">
+            <label>Öne Çıkan</label>
+            <select id="prodFeatured">
+              <option value="0">Hayır</option>
+              <option value="1">Evet</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn" style="background:var(--border);color:var(--gray);" onclick="closeModal()">İptal</button>
+          <button type="submit" class="btn btn-primary">Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const API = window.location.protocol === 'file:' ? 'http://localhost:3001' : '';
+
+    function getToken() {
+      const t = localStorage.getItem('vheora_token');
+      if (!t) window.location.href = '/admin/';
+      return t;
+    }
+
+    document.getElementById('sidebar').innerHTML = `
+      <div class="sidebar-logo">VHEORA</div>
+      <div class="sidebar-sub">Admin Panel</div>
+      <nav class="sidebar-nav">
+        <a href="/admin/dashboard.html" class="sidebar-link">📊 Dashboard</a>
+        <a href="/admin/products.html" class="sidebar-link active">💎 Ürünler</a>
+        <a href="/admin/messages.html" class="sidebar-link">✉️ Mesajlar</a>
+        <a href="/admin/testimonials.html" class="sidebar-link">⭐ Yorumlar</a>
+        <a href="/admin/logs.html" class="sidebar-link">📋 Loglar</a>
+        <a href="/" class="sidebar-link">🌐 Siteye Git</a>
+      </nav>
+      <button class="sidebar-logout" onclick="logout()">🚪 Çıkış Yap</button>
+    `;
+
+    document.body.insertAdjacentHTML('afterbegin', '<div class="sidebar-overlay" onclick="closeSidebar()"></div>');
+    document.body.insertAdjacentHTML('afterbegin', '<button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Menuyu ac/kapat">☰</button>');
+
+    function toggleSidebar() {
+      document.body.classList.toggle('sidebar-open');
+    }
+
+    function closeSidebar() {
+      document.body.classList.remove('sidebar-open');
+    }
+
+    function logout() {
+      localStorage.removeItem('vheora_token');
+      window.location.href = '/admin/';
+    }
+
+    function openModal(product) {
+      document.getElementById('modalOverlay').classList.add('active');
+      if (product) {
+        document.getElementById('modalTitle').textContent = 'Ürün Düzenle';
+        document.getElementById('editId').value = product.id;
+        document.getElementById('prodName').value = product.name;
+        document.getElementById('prodCategory').value = product.category;
+        document.getElementById('prodDescription').value = product.description || '';
+        document.getElementById('prodPrice').value = product.price || '';
+        document.getElementById('prodBadge').value = product.badge || '';
+        document.getElementById('prodFeatured').value = product.is_featured;
+      } else {
+        document.getElementById('modalTitle').textContent = 'Yeni Ürün';
+        document.getElementById('editId').value = '';
+        document.getElementById('productForm').reset();
+        document.getElementById('prodFeatured').value = '0';
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('modalOverlay').classList.remove('active');
+    }
+
+    document.getElementById('modalOverlay').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeModal();
+    });
+
+    document.getElementById('productForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const token = getToken();
+      const editId = document.getElementById('editId').value;
+      const isEdit = !!editId;
+
+      const formData = new FormData();
+      formData.append('name', document.getElementById('prodName').value);
+      formData.append('category', document.getElementById('prodCategory').value);
+      formData.append('description', document.getElementById('prodDescription').value);
+      formData.append('price', document.getElementById('prodPrice').value);
+      formData.append('badge', document.getElementById('prodBadge').value);
+      formData.append('is_featured', document.getElementById('prodFeatured').value);
+
+      const fileInput = document.getElementById('prodImage');
+      if (fileInput.files[0]) formData.append('image', fileInput.files[0]);
+
+      const url = isEdit ? `${API}/api/products/${editId}` : `${API}/api/products`;
+      const method = isEdit ? 'PUT' : 'POST';
+
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok) {
+          closeModal();
+          loadProducts();
+        } else {
+          alert(data.error);
+        }
+      } catch (err) {
+        alert('Sunucu hatası');
+      }
+    });
+
+    async function deleteProduct(id) {
+      if (!confirm('Bu ürünü silmek istediğinize emin misiniz?')) return;
+      const token = getToken();
+      try {
+        await fetch(`${API}/api/products/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        loadProducts();
+      } catch (err) {
+        alert('Silme hatası');
+      }
+    }
+
+    async function loadProducts() {
+      const container = document.getElementById('productsContainer');
+      try {
+        const res = await fetch(`${API}/api/products`);
+        const products = await res.json();
+
+        if (!products.length) {
+          container.innerHTML = '<p class="empty-state">Henüz ürün eklenmemiş.</p>';
+          return;
+        }
+
+        container.innerHTML = `
+          <table>
+            <thead><tr><th>Görsel</th><th>Ad</th><th>Kategori</th><th>Rozet</th><th>Öne Çıkan</th><th style="text-align:right;">İşlem</th></tr></thead>
+            <tbody>
+              ${products.map(p => `
+                <tr>
+                  <td><img src="${p.image ? `${API}${p.image}` : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><rect fill="%23111118" width="50" height="50"/></svg>'}" class="product-thumb"></td>
+                  <td style="font-weight:500;">${p.name}</td>
+                  <td><span class="badge badge-gold">${p.category}</span></td>
+                  <td>${p.badge || '-'}</td>
+                  <td>${p.is_featured ? '⭐' : '-'}</td>
+                  <td style="text-align:right;">
+                    <button class="btn btn-sm btn-primary" onclick="openModal(${JSON.stringify(p).replace(/"/g, '&quot;')})">✏️</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteProduct(${p.id})">🗑️</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      } catch (err) {
+        container.innerHTML = '<p class="empty-state">Sunucuya bağlanılamadı.</p>';
+      }
+    }
+
+    loadProducts();
+  </script>
+</body>
+</html>
