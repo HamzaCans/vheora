@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Sayfa bulunamadi | VHEORA">
+  <meta name="robots" content="noindex, nofollow">
+  <title>404 - Sayfa Bulunamadi | VHEORA</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <style>
+    body {
+      background: var(--color-dark);
+      color: var(--color-white);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 20px;
+    }
+    .error-code {
+      font-family: var(--font-display);
+      font-size: clamp(6rem, 15vw, 12rem);
+      font-weight: 900;
+      background: var(--gradient-gold);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+      margin-bottom: 16px;
+    }
+    .error-title {
+      font-family: var(--font-display);
+      font-size: clamp(1.5rem, 4vw, 2.5rem);
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .error-text {
+      color: var(--color-gray);
+      font-size: 1.1rem;
+      max-width: 500px;
+      margin-bottom: 40px;
+      line-height: 1.8;
+    }
+    .error-actions {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    @media (max-width: 480px) {
+      .error-actions {
+        flex-direction: column;
+        width: 100%;
+        max-width: 280px;
+      }
+      .error-actions .btn-primary,
+      .error-actions .btn-secondary {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="error-code">404</div>
+  <h1 class="error-title">Sayfa Bulunamadi</h1>
+  <p class="error-text">
+    Aradiginiz sayfa kaldirilmis, adi degistirilmis veya gecici olarak kullanima kapali olabilir.
+  </p>
+  <div class="error-actions">
+    <a href="/" class="btn-primary">Ana Sayfaya Don</a>
+    <a href="collection.html" class="btn-secondary">Koleksiyonu Kesfet</a>
+  </div>
+</body>
+</html>
