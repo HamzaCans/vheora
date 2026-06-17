@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard | VHEORA Admin</title>
+  <link rel="stylesheet" href="admin.css?v=2">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&family=Cormorant+Garamond:wght@500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-subtitle">VHEORA yonetim paneline hos geldiniz.</p>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="exportCSV()">CSV Export</button>
+    </div>
+    <div class="cards-grid" id="statsGrid">
+      <div class="stat-card"><div class="stat-card-value" id="statProducts">-</div><div class="stat-card-label">Urunler</div></div>
+      <div class="stat-card"><div class="stat-card-value" id="statMessages">-</div><div class="stat-card-label">Mesajlar</div></div>
+      <div class="stat-card"><div class="stat-card-value" id="statUnread">-</div><div class="stat-card-label">Okunmamis Mesaj</div></div>
+      <div class="stat-card"><div class="stat-card-value" id="statTestimonials">-</div><div class="stat-card-label">Yorumlar</div></div>
+      <div class="stat-card"><div class="stat-card-value" id="statApproved">-</div><div class="stat-card-label">Onayli Yorum</div></div>
+    </div>
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3 class="chart-title">Aylik Mesajlar</h3>
+        <canvas id="messagesChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3 class="chart-title">Aylik Yorumlar</h3>
+        <canvas id="testimonialsChart"></canvas>
+      </div>
+    </div>
+    <div class="widget-card" id="latestActivityWidget">
+      <div class="widget-title">
+        <span>🛡️ Son Admin İşlemleri</span>
+        <a href="/admin/logs.html" class="widget-link">Tümünü Gör →</a>
+      </div>
+      <div id="latestActivityList">
+        <p style="color:var(--gray);font-size:0.85rem;text-align:center;padding:12px 0;">Yükleniyor...</p>
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-top:24px;">
+      <h3 style="font-family:'Playfair Display',serif;font-size:1.1rem;margin-bottom:16px;">Son Mesajlar</h3>
+      <div id="recentMessages"><p class="empty-state">Yukleniyor...</p></div>
+    </div>
+  </main>
+
+  <script>
+    const API = window.location.protocol === 'file:' ? 'http://localhost:3001' : '';
+
+    function getToken() {
+      const t = localStorage.getItem('vheora_token');
+      if (!t) window.location.href = '/admin/';
+      return t;
+    }
+
+    function logout() {
+      localStorage.removeItem('vheora_token');
+      localStorage.removeItem('vheora_user');
+      window.location.href = '/admin/';
+    }
+
+    document.getElementById('sidebar').innerHTML = `
+      <div class="sidebar-logo">VHEORA</div>
+      <div class="sidebar-sub">Admin Panel</div>
+      <nav class="sidebar-nav">
+        <a href="/admin/dashboard.html" class="sidebar-link active">📊 Dashboard</a>
+        <a href="/admin/products.html" class="sidebar-link">💎 Urunler</a>
+        <a href="/admin/messages.html" class="sidebar-link">✉️ Mesajlar</a>
+        <a href="/admin/testimonials.html" class="sidebar-link">⭐ Yorumlar</a>
+        <a href="/admin/logs.html" class="sidebar-link">📋 Loglar</a>
+        <a href="/" class="sidebar-link">🌐 Siteye Git</a>
+      </nav>
+      <button class="sidebar-logout" onclick="logout()">🚪 Cikis Yap</button>
+    `;
+
+    document.body.insertAdjacentHTML('afterbegin', '<div class="sidebar-overlay" onclick="closeSidebar()"></div>');
+    document.body.insertAdjacentHTML('afterbegin', '<button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Menuyu ac/kapat">☰</button>');
+
+    function toggleSidebar() {
+      document.body.classList.toggle('sidebar-open');
+    }
+
+    function closeSidebar() {
+      document.body.classList.remove('sidebar-open');
+    }
+
+    let messagesChart = null;
+    let testimonialsChart = null;
+
+    function renderChart(canvasId, labels, data, label, color) {
+      const ctx = document.getElementById(canvasId);
+      if (!ctx) return;
+      const chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label,
+            data,
+            backgroundColor: color || 'rgba(212, 168, 83, 0.3)',
+            borderColor: 'rgba(212, 168, 83, 0.8)',
+            borderWidth: 1,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { stepSize: 1, color: '#8a8a9a' },
+              grid: { color: 'rgba(255,255,255,0.05)' }
+            },
+            x: {
+              ticks: { color: '#8a8a9a' },
+              grid: { display: false }
+            }
+          }
+        }
+      });
+      return chart;
+    }
+
+    async function loadDashboard() {
+      const token = getToken();
+      try {
+        const [statsRes, msgRes] = await Promise.all([
+          fetch(`${API}/api/admin/stats`, { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(`${API}/api/admin/messages`, { headers: { 'Authorization': `Bearer ${token}` } })
+        ]);
+
+        const stats = await statsRes.json();
+        const messages = await msgRes.json();
+
+        document.getElementById('statProducts').textContent = stats.products;
+        document.getElementById('statMessages').textContent = stats.messages;
+        document.getElementById('statUnread').textContent = stats.unread_messages;
+        document.getElementById('statTestimonials').textContent = stats.testimonials;
+        document.getElementById('statApproved').textContent = stats.approved_testimonials;
+
+        // Monthly charts
+        const msgLabels = stats.monthly_messages.map(m => m.month);
+        const msgData = stats.monthly_messages.map(m => m.count);
+        if (messagesChart) messagesChart.destroy();
+        messagesChart = renderChart('messagesChart', msgLabels, msgData, 'Mesaj');
+
+        const testLabels = stats.monthly_testimonials.map(m => m.month);
+        const testData = stats.monthly_testimonials.map(m => m.count);
+        if (testimonialsChart) testimonialsChart.destroy();
+        testimonialsChart = renderChart('testimonialsChart', testLabels, testData, 'Yorum', 'rgba(46, 204, 113, 0.3)');
+
+        // Recent messages
+        const recent = messages.slice(0, 5);
+        const recentHtml = recent.length ? `
+          <table>
+            <thead><tr><th>Tarih</th><th>Isim</th><th>Konu</th><th>Tip</th></tr></thead>
+            <tbody>
+              ${recent.map(m => `
+                <tr>
+                  <td style="color:var(--gray);font-size:0.8rem;">${new Date(m.created_at).toLocaleDateString('tr-TR')}</td>
+                  <td>${m.first_name || '-'} ${m.last_name || ''}</td>
+                  <td>${m.subject || m.product_name || '-'}</td>
+                  <td><span class="badge ${m.type === 'quote' ? 'badge-gold' : 'badge-green'}">${m.type === 'quote' ? 'Teklif' : 'Iletisim'}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : '<p class="empty-state">Henuz mesaj yok</p>';
+
+        document.getElementById('recentMessages').innerHTML = recentHtml;
+      } catch (err) {
+        document.getElementById('statsGrid').innerHTML = '<p class="empty-state">Sunucuya baglanilamadi. Sunucuyu baslatin: npm start</p>';
+      }
+    }
+
+    async function exportCSV() {
+      const token = getToken();
+      try {
+        const res = await fetch(`${API}/api/admin/messages`, { headers: { 'Authorization': `Bearer ${token}` } });
+        const messages = await res.json();
+
+        const headers = 'Tarih,Isim,E-posta,Telefon,Konu/Urun,Mesaj,Tip\n';
+        const rows = messages.map(m => {
+          const date = new Date(m.created_at).toLocaleDateString('tr-TR');
+          const name = `${m.first_name || ''} ${m.last_name || ''}`.trim();
+          const subject = (m.subject || m.product_name || '').replace(/,/g, ' ');
+          const msg = (m.message || '').replace(/,/g, ' ').replace(/\n/g, ' ');
+          const type = m.type === 'quote' ? 'Teklif' : 'Iletisim';
+          return `${date},${name},${m.email || ''},${m.phone || ''},${subject},${msg},${type}`;
+        }).join('\n');
+
+        const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `vheora-mesajlar-${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        alert('Export basarisiz');
+      }
+    }
+
+    loadDashboard();
+
+    async function loadLatestActivity() {
+      try {
+        const res = await fetch(`${API}/api/admin/logs?limit=5`, { headers: { 'Authorization': 'Bearer ' + getToken() } });
+        const logs = await res.json();
+        const list = document.getElementById('latestActivityList');
+        if (!logs.length) {
+          list.innerHTML = '<p style="color:var(--gray);font-size:0.85rem;text-align:center;padding:12px 0;">Henüz kayıt yok.</p>';
+          return;
+        }
+        const actionMap = { login: '🔑 Giriş', logout: '🚪 Çıkış', delete_message: '🗑️ Mesaj Silme', delete_testimonial: '🗑️ Yorum Silme', approve_testimonial: '✅ Yorum Onay', delete_product: '🗑️ Ürün Silme', update_product: '✏️ Ürün Düzenleme', create_product: '➕ Ürün Ekleme', read_message: '📩 Mesaj Okundu' };
+        list.innerHTML = logs.map(l => `
+          <div class="widget-item">
+            <div class="widget-item-icon ${l.action === 'login' ? 'login' : 'action'}">${l.action === 'login' ? '🔑' : '⚡'}</div>
+            <div class="widget-item-info">
+              <div class="wi-top">${actionMap[l.action] || l.action} — <strong>${l.username}</strong></div>
+              <div class="wi-bottom">${l.device_info || ''} · ${l.ip_address || ''}</div>
+            </div>
+            <div class="widget-item-time">${new Date(l.created_at + 'Z').toLocaleDateString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}</div>
+          </div>
+        `).join('');
+      } catch(e) {
+        document.getElementById('latestActivityList').innerHTML = '<p style="color:var(--gray);font-size:0.85rem;text-align:center;padding:12px 0;">Yüklenemedi.</p>';
+      }
+    }
+    loadLatestActivity();
+  </script>
+</body>
+</html>
